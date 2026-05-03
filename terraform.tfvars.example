@@ -1,0 +1,82 @@
+# Project Wide
+project_name = "backup-and-recovery"
+environment  = "dev"
+
+
+# Regions
+primary_region = "us-east-2"
+dr_region      = "us-west-1"
+
+# EC2 Workload
+my_ip = "YOUR_IP/32"
+public_sec_group_config = {
+  "http" = {
+    port        = 80
+    cidr        = "0.0.0.0/0"
+    description = "HTTP Access"
+  }
+  "extra" = {
+    port        = 8080
+    cidr        = "0.0.0.0/0"
+    description = "Extra port connectivity"
+  }
+  "https" = {
+    port        = 443
+    cidr        = "0.0.0.0/0"
+    description = "HTTPS Access"
+  }
+}
+
+instance_configs = {
+  web-server = {
+    instance_type = "t2.micro"
+    backup_policy = "critical" # Most frequent backups
+    public_ip     = true
+    key_name      = "iykay_key"
+    additional_volumes = [
+      {
+        size         = 8
+        type         = "gp3"
+        fast_restore = false # Enable FSR for quick recovery
+      }
+    ]
+  }
+
+  app-server = {
+    instance_type = "t2.micro"
+    backup_policy = "daily"
+    public_ip     = false
+    key_name      = null
+    additional_volumes = [
+      {
+        size         = 8
+        type         = "gp3"
+        fast_restore = false
+      }
+    ]
+  }
+
+  db-server = {
+    instance_type = "t2.micro"
+    backup_policy = "critical"
+    public_ip     = false
+    key_name      = null
+    additional_volumes = [
+      {
+        size         = 8
+        type         = "gp3"
+        fast_restore = false
+      }
+    ]
+  }
+}
+ssh_access = true
+vpc_id = null
+subnet_ids = null
+
+# Backup
+enable_cross_region_copy = true
+
+# Recovery
+# kms_key_arn = "arn:aws:kms:your_kms_key"
+dr_availability_zones = null

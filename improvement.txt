@@ -1,0 +1,3 @@
+- Make entire backup into a map(object({})) varible in backup module to enable more flexible backup change requirements from the root.
+
+- Created monitoring module using cloudwatch to monitor backup and recovery activities in AWS 

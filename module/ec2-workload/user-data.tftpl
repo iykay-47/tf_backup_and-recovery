@@ -1,0 +1,95 @@
+#!/bin/bash
+set -e
+
+# Update system
+yum update -y
+
+# Install CloudWatch agent
+yum install -y amazon-cloudwatch-agent
+
+# Create application directories
+mkdir -p /data/app-state
+mkdir -p /var/log/app
+
+# Create initial state files for recovery validation
+cat > /data/instance-info.txt << EOF
+Instance Name: ${instance_name}
+Environment: ${environment}
+Created: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+Hostname: $(hostname)
+Instance ID: $(ec2-metadata --instance-id | cut -d " " -f 2)
+EOF
+
+# Initialize application state log
+echo "=== Application State Log ===" > /data/app-state/state.log
+echo "Initialized: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> /data/app-state/state.log
+echo "" >> /data/app-state/state.log
+
+# Create hourly cron job to simulate ongoing application activity
+cat > /etc/cron.hourly/app-state-update << 'CRONEOF'
+#!/bin/bash
+echo "Hourly update: $(date -u +"%Y-%m-%d %H:%M:%S UTC") - State: ACTIVE" >> /data/app-state/state.log
+CRONEOF
+
+chmod +x /etc/cron.hourly/app-state-update
+
+# Format and mount additional volumes if present
+for device in /dev/nvme[1-9]n1 /dev/xvd[f-p]; do
+  if [ -b "$device" ]; then
+    # Check if already has filesystem
+    if ! blkid "$device" > /dev/null 2>&1; then
+      mkfs -t ext4 "$device"
+    fi
+    
+    # Create mount point
+    volume_name=$(basename "$device")
+    mount_point="/mnt/data-$volume_name"
+    mkdir -p "$mount_point"
+    
+    # Mount volume
+    mount "$device" "$mount_point"
+    
+    # Add to fstab for persistence
+    uuid=$(blkid -s UUID -o value "$device")
+    echo "UUID=$uuid $mount_point ext4 defaults,nofail 0 2" >> /etc/fstab
+    
+    # Create test data
+    echo "Volume mounted: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" > "$mount_point/mount-info.txt"
+  fi
+done
+
+# Install basic monitoring tools
+yum install -y htop iotop sysstat
+
+# Configure CloudWatch agent (basic config)
+cat > /opt/aws/amazon-cloudwatch-agent/etc/config.json << 'EOF'
+{
+  "metrics": {
+    "namespace": "CustomApp",
+    "metrics_collected": {
+      "disk": {
+        "measurement": [
+          {"name": "used_percent", "rename": "DiskUsedPercent"}
+        ],
+        "metrics_collection_interval": 300
+      },
+      "mem": {
+        "measurement": [
+          {"name": "mem_used_percent", "rename": "MemoryUsedPercent"}
+        ],
+        "metrics_collection_interval": 300
+      }
+    }
+  }
+}
+EOF
+
+# Start CloudWatch agent
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+  -a fetch-config \
+  -m ec2 \
+  -s \
+  -c file:/opt/aws/amazon-cloudwatch-agent/etc/config.json
+
+# Log completion
+echo "User data execution completed: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> /var/log/user-data.log

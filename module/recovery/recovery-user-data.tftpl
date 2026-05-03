@@ -1,0 +1,37 @@
+#!/bin/bash
+set -e
+
+# DR Recovery Post-Boot Configuration
+echo "=== DR Recovery Instance Boot ===" > /var/log/dr-recovery.log
+echo "Instance: ${instance_name}" >> /var/log/dr-recovery.log
+echo "Environment: ${environment}" >> /var/log/dr-recovery.log
+echo "Recovery Time: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> /var/log/dr-recovery.log
+
+# Update system
+yum update -y
+
+# Install CloudWatch agent
+yum install -y amazon-cloudwatch-agent
+
+# Verify application data was restored
+if [ -f /data/instance-info.txt ]; then
+    echo "SUCCESS: Application data found from backup" >> /var/log/dr-recovery.log
+    cat /data/instance-info.txt >> /var/log/dr-recovery.log
+else
+    echo "WARNING: Application data not found" >> /var/log/dr-recovery.log
+fi
+
+# Create DR-specific marker
+cat > /data/dr-recovery-info.txt << EOF
+DR Recovery Instance
+Original Instance: ${instance_name}
+Recovered in: ${environment}
+Recovery Time: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+Recovery Host: $(hostname)
+Recovery Instance ID: $(ec2-metadata --instance-id | cut -d " " -f 2)
+EOF
+
+# Restart any application services that should auto-start
+# (Add application-specific startup commands here)
+
+echo "DR recovery user data completed: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> /var/log/dr-recovery.log
